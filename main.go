@@ -1,53 +1,26 @@
-# go-jorm
-
-## 1. 读取一条数据库记录
-
-### a. 准备数据库数据
-
-```sql
-CREATE DATABASE recording CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-
-DROP TABLE IF EXISTS album;
-
-CREATE TABLE album (
-  id         INT AUTO_INCREMENT NOT NULL,
-  title      VARCHAR(128) NOT NULL,
-  artist     VARCHAR(255) NOT NULL,
-  price      DECIMAL(5,2) NOT NULL,
-  PRIMARY KEY (`id`)
-);
-
-INSERT INTO album
-  (title, artist, price)
-VALUES
-  ('Blue Train', 'John Coltrane', 56.99),
-  ('Giant Steps', 'John Coltrane', 63.99),
-  ('Jeru', 'Gerry Mulligan', 17.99),
-  ('Sarah Vaughan', 'Sarah Vaughan', 34.98);
-```
-
-> [official doc](https://golang.org/doc/tutorial/database-access)
-
-### b. 使用标准库 database/sql
-
-```go
 package main
 
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"unsafe"
+
+	"xorm.io/xorm"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type Album struct {
-	ID int64
+	Id int64 `xorm:"id"`
 	Title string
 	Artist string
 	Price float32
 }
 
-func main() {
+func officialQueryRow() {
 	db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/recording")
 	if err != nil {
 		fmt.Printf("open DB error: %v\n", err)
@@ -56,43 +29,21 @@ func main() {
 
 	var album Album
 
-	err = db.QueryRow("SELECT * FROM album WHERE id = ?", 1).Scan(&album.ID, &album.Title, &album.Artist, &album.Price)
+	err = db.QueryRow("SELECT * FROM album WHERE id = ?", 1).Scan(&album.Id, &album.Title, &album.Artist, &album.Price)
 	if err != nil {
 		fmt.Printf("query row error: %v\n", err)
 	}
 
 	fmt.Println(album)
 }
-```
 
-### c. 使用 xorm
-
-```go
-package main
-
-import (
-	"database/sql"
-	"fmt"
-
-	"xorm.io/xorm"
-
-	_ "github.com/go-sql-driver/mysql"
-)
-
-type Album struct {
-	ID int64 `xorm:"id"`
-	Title string
-	Artist string
-	Price float32
-}
-
-func main() {
+func xormQueryRow() {
 	orm, err:= xorm.NewEngine("mysql", "root:password@tcp(127.0.0.1:3306)/recording")
 	if err != nil {
 		fmt.Printf("xorm open DB error: %v\n", err)
 	}
 
-	album := Album{ID: 1}
+	album := Album{Id: 1}
 
 	has, err := orm.Get(&album)
 	if err != nil {
@@ -104,12 +55,8 @@ func main() {
 
 	fmt.Println(album)
 }
-```
 
-### d. 我的实现
-
-```
-func main() {
+func jormQueryRow() {
 	db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/recording")
 	if err != nil {
 		fmt.Printf("open DB error: %v\n", err)
@@ -221,23 +168,28 @@ func main() {
 
 	fmt.Println(album)
 }
-```
 
+func snakeCaseName(name string) string {
+	newstr := make([]byte, 0, len(name)+1)
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if isUpper := 'A' <= c && c <= 'Z'; isUpper {
+			if i > 0 {
+				newstr = append(newstr, '_')
+			}
+			c += 'a' - 'A'
+		}
+		newstr = append(newstr, c)
+	}
+	return b2s(newstr)
+}
 
-## TODO
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
 
-* [ ] query one record
-* [ ] insert one record
-* [ ] delete one record
-* [ ] update one record
-* [ ] query records
-* [ ] insert records
-* [ ] delete records
-* [ ] update records
-* [ ] create table
-* [ ] delete table
-* [ ] import
-* [ ] dump
-* [ ] transaction
-* [ ] query cancellation
-* [ ] connection pool
+func main() {
+	// officialQueryRow()
+	// xormQueryRow()
+	jormQueryRow()
+}
